@@ -1,5 +1,5 @@
 {
-  "name": "blockchain_app",
+  "name": "backend",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -9,10 +9,6 @@
   "author": "",
   "license": "ISC",
   "description": "",
-  "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "hardhat": "^2.23.0"
-  },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
