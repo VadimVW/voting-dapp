@@ -1,85 +1,112 @@
 import React, { useEffect, useState } from "react";
+import { loginAndInitWallet, getStoredWallet } from "./AuthService";
 import { ethers } from "ethers";
 
-const API = "http://localhost:4000";
+const API_URL = "http://localhost:4000";
 
 function App() {
-  const [account, setAccount] = useState("");
+  const [wallet,  setWallet]  = useState(null);
   const [nonce,   setNonce]   = useState(0);
-  const [results, setResults] = useState({});
+  const [votes,   setVotes]   = useState({});
   const [status,  setStatus]  = useState("");
   const [busy,    setBusy]    = useState(false);
 
+  // Ініціалізація: авторизація і завантаження nonce + результатів
   useEffect(() => {
     async function init() {
-      if (!window.ethereum) return;
-      const [addr] = await window.ethereum.request({ method: "eth_requestAccounts" });
-      setAccount(addr);
-      const r1 = await fetch(`${API}/nonce/${addr}`);
+      let w = getStoredWallet();
+      if (!w) {
+        try {
+          w = await loginAndInitWallet();
+        } catch (e) {
+          setStatus("❌ Не вдалося авторизуватися");
+          return;
+        }
+      }
+      setWallet(w);
+
+      // Отримуємо nonce для підпису
+      const r1 = await fetch(`${API_URL}/nonce/${w.address}`);
       const { nonce } = await r1.json();
       setNonce(nonce);
+
+      // Завантажуємо результати
       await fetchResults();
     }
     init();
-    window.ethereum?.on("accountsChanged", () => window.location.reload());
   }, []);
 
+  // Завантажити результати голосування
   async function fetchResults() {
     try {
-      const r = await fetch(`${API}/results`);
-      const data = await r.json();
+      const resp = await fetch(`${API_URL}/results`);
+      const data = await resp.json();
       const map = {};
-      data.forEach(({name,votes}) => map[name] = votes);
-      setResults(map);
+      data.forEach(({ name, votes }) => map[name] = votes);
+      setVotes(map);
     } catch (e) {
-      console.error("fetchResults:", e);
+      console.error("Помилка завантаження результатів:", e);
     }
   }
 
-  async function vote(candidate) {
+  // Обробка натискання кнопки «Голосувати»
+  async function handleVote(candidate) {
     setBusy(true);
-    setStatus("🔏 Підпис...");
+    setStatus("🔏 Підпис повідомлення…");
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer   = await provider.getSigner();
+      // Формуємо hash так само, як у контракті
       const hash = ethers.solidityPackedKeccak256(
-        ["string","address","uint256"], [candidate, account, nonce]
+        ["string","address","uint256"],
+        [candidate, wallet.address, nonce]
       );
-      const signature = await signer.signMessage(ethers.getBytes(hash));
-      setStatus("📡 Надсилаю...");
-      const res = await fetch(`${API}/vote`, {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({ candidate, signer: account, nonce, signature })
+
+      // Підписуємо hash локальним гаманцем
+      const signature = await wallet.signMessage(ethers.getBytes(hash));
+
+      setStatus("📡 Надсилаємо голос на реле…");
+      const resp = await fetch(`${API_URL}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidate,
+          signer:    wallet.address,
+          nonce,
+          signature
+        })
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
-      setStatus(`✅ Прийнято tx: ${json.txHash}`);
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.error);
+
+      setStatus(`✅ Голос прийнято, txHash: ${json.txHash}`);
       setNonce(nonce + 1);
       await fetchResults();
     } catch (err) {
       console.error(err);
-      setStatus(`❌ ${err.reason||err.message}`);
+      setStatus(`❌ Помилка: ${err.reason || err.message}`);
     } finally {
       setBusy(false);
     }
   }
 
+  if (!wallet) {
+    return <div>Авторизація…</div>;
+  }
+
   return (
-    <div style={{ padding:20, fontFamily:"sans-serif" }}>
-      <h2>🗳️ Голосування (meta-tx)</h2>
-      <p>Ваш акаунт: <code>{account}</code></p>
+    <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
+      <h2>🗳️ Електронне голосування без MetaMask</h2>
+      <p>Ваш адрес: <code>{wallet.address}</code></p>
+
       {["Alice","Bob","Charlie"].map(name => (
         <div key={name} style={{ margin: "1em 0" }}>
-          <b>{name}</b>: {results[name] ?? 0} голосів
-          <button
-            disabled={busy}
-            onClick={()=>vote(name)}
-            style={{ marginLeft: 10 }}
-          >Голосувати</button>
+          <strong>{name}</strong>: {votes[name] || 0} голосів&nbsp;
+          <button onClick={() => handleVote(name)} disabled={busy}>
+            Голосувати
+          </button>
         </div>
       ))}
-      <p><em>{status}</em></p>
+
+      {status && <p><em>{status}</em></p>}
     </div>
   );
 }
