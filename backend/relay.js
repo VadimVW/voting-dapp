@@ -104,7 +104,74 @@ app.get("/results", async (req, res) => {
   }
 });
 
-// Запуск сервера
+// // Повертає всі блоки з їхніми транзакціями
+// app.get("/blocks", async (req, res) => {
+//   try {
+//     const latest = await provider.getBlockNumber();
+//     const out = [];
+
+//     // Для кожного блоку 0…latest
+//     for (let i = 0; i <= latest; i++) {
+//       const block = await provider.getBlockWithTransactions(i);
+//       // Трансформуємо в рідкісніші поля
+//       out.push({
+//         number:     block.number,
+//         hash:       block.hash,
+//         timestamp:  block.timestamp,
+//         txCount:    block.transactions.length,
+//         transactions: block.transactions.map(tx => {
+//           let decoded = null;
+//           // спробуємо декодувати виклики до нашого контракту
+//           if (tx.to && tx.to.toLowerCase() === CONTRACT_ADDRESS.toLowerCase()) {
+//             try {
+//               const parsed = contract.interface.parseTransaction({ data: tx.data, value: tx.value });
+//               decoded = {
+//                 name: parsed.name,
+//                 args: parsed.args
+//               };
+//             } catch {}
+//           }
+//           return {
+//             hash:    tx.hash,
+//             from:    tx.from,
+//             to:      tx.to,
+//             data:    tx.data,
+//             decoded // or null
+//           };
+//         })
+//       });
+//     }
+
+//     res.json(out);
+//   } catch (err) {
+//     console.error("Не вдалося отримати блоки:", err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+// Повернути масив блоків з хешами транзакцій
+app.get("/blocks", async (req, res) => {
+  try {
+    const count  = parseInt(req.query.count) || 10;
+    const latest = await provider.getBlockNumber();
+    const out    = [];
+
+    for (let i = latest; i > latest - count && i >= 0; i--) {
+      // повертаємо просто хеші транзакцій
+      const blk = await provider.getBlock(i);
+      out.push({
+        number:       blk.number,
+        timestamp:    blk.timestamp,
+        transactions: blk.transactions, // масив хешів
+      });
+    }
+    res.json(out);
+  } catch (e) {
+    console.error("Error fetching blocks:", e);
+    res.status(500).json({ error: "Не вдалося завантажити блоки" });
+  }
+});
+
 app.listen(PORT, () => {
-  console.log(`✅ Relay-сервер слухає на http://localhost:${PORT}`);
+  console.log(`✅ Relay server listening at http://localhost:${PORT}`);
 });
