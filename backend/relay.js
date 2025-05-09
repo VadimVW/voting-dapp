@@ -26,8 +26,14 @@ app.use(cors());
 app.use(express.json());
 
 const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+// const { hexValue } = ethers;
 const wallet   = new ethers.Wallet(PRIVATE_KEY, provider);
 const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, wallet);
+
+// helper to convert a JS number to 0x-prefixed hex
+function toHex(n) {
+  return "0x" + n.toString(16);
+}
 
 // Прості в пам’яті nonces для кожного адреса
 const nonces = {};
@@ -152,23 +158,23 @@ app.get("/results", async (req, res) => {
 // Повернути масив блоків з хешами транзакцій
 app.get("/blocks", async (req, res) => {
   try {
-    const count  = parseInt(req.query.count) || 10;
     const latest = await provider.getBlockNumber();
-    const out    = [];
+    const blocks = [];
 
-    for (let i = latest; i > latest - count && i >= 0; i--) {
-      // повертаємо просто хеші транзакцій
-      const blk = await provider.getBlock(i);
-      out.push({
-        number:       blk.number,
-        timestamp:    blk.timestamp,
-        transactions: blk.transactions, // масив хешів
-      });
+    // перебираємо від 0 до latest
+    for (let i = 0; i <= latest; i++) {
+      // отримуємо блок разом із масивом транзакцій
+      const block = await provider.send("eth_getBlockByNumber", [
+        toHex(i),
+        true
+      ]);
+      blocks.push(block);
     }
-    res.json(out);
-  } catch (e) {
-    console.error("Error fetching blocks:", e);
-    res.status(500).json({ error: "Не вдалося завантажити блоки" });
+
+    res.json(blocks);
+  } catch (err) {
+    console.error("Failed to fetch blocks:", err);
+    res.status(500).json({ error: "Failed to fetch blocks" });
   }
 });
 
