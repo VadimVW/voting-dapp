@@ -1,0 +1,11 @@
+.star-size-16,
+.star-size-16 * {
+  box-sizing: border-box;
+}
+.star-size-16 {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  position: relative;
+  overflow: visible;
+}
